@@ -446,11 +446,27 @@ func fuseOCR(o Options, frames []events.Frame, masks []mask.Frame) int {
 	for f, obs := range byFrame {
 		for _, ob := range obs {
 			covered := false
+			best := 0.0
 			for _, cb := range frames[f].Boxes {
-				if overlapRatio(ob.Rect, cb) >= 0.5 {
-					covered = true
-					break
+				// Covered means a classical box already explains most of
+				// THIS OCR box (intersection over the OCR area). Min-area
+				// overlap would also fire when the OCR box subsumes a small
+				// classical box — but that is exactly the box fusion exists
+				// to add.
+				if inter := ob.Rect.Intersect(cb); !inter.Empty() {
+					r := float64(inter.Area()) / float64(ob.Rect.Area())
+					if r > best {
+						best = r
+					}
+					if inter.Area()*2 >= ob.Rect.Area() {
+						covered = true
+						break
+					}
 				}
+			}
+			if os.Getenv("DESUB_DBG") != "" {
+				fmt.Fprintf(os.Stderr, "fuseOCR f%d rect=%v classical=%d cov=%.2f covered=%v\n",
+					f, ob.Rect, len(frames[f].Boxes), best, covered)
 			}
 			if covered {
 				continue
