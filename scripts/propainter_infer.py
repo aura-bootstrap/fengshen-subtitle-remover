@@ -112,6 +112,12 @@ def main():
            "--video", sub_video,
            "--mask", mask_dir,
            "--output", model_out]
+    for env_name, flag in (("PROPAINTER_MASK_DILATION", "--mask_dilation"),
+                           ("PROPAINTER_RAFT_ITER", "--raft_iter"),
+                           ("PROPAINTER_NEIGHBOR_LENGTH", "--neighbor_length")):
+        v = os.environ.get(env_name, "")
+        if v:
+            cmd += [flag, v]
     if len(frames) > 0:
         cmd += ["--save_frames"]
     r = subprocess.run(cmd, cwd=home, env=env, capture_output=True, text=True)
