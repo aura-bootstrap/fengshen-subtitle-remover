@@ -16,6 +16,10 @@ ProPainter itself is NOT bundled: set PROPAINTER_HOME to a checkout of
 https://github.com/sczhou/ProPainter with its weights under weights/. Any
 setup or inference failure exits non-zero (3) with the reason on stderr, so
 the caller degrades the event to the motion tier (R5.6).
+
+存档标注（tag slice1-pp-grain）：slice1_pp_grain.mp4（2026-09-17 23:21）经本脚本
+生成，本版尚无旋钮透传，实际生效的是 ProPainter 模型默认值：
+mask_dilation=4、raft_iter=20、neighbor_length=10。
 """
 import argparse
 import os

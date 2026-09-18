@@ -198,10 +198,16 @@ func cmdDetect(args []string) error {
 func cmdRemove(args []string) error {
 	fs := flag.NewFlagSet("remove", flag.ExitOnError)
 	fs.Usage = usage
+	// 存档标注（tag slice1-pp-grain）：生成 slice1_pp_grain.mp4 的完整参数
+	//   desub remove data/raw/slice1.mp4 -o data/out/slice1_pp_grain.mp4 \
+	//     --propainter --force-engine propainter --grain
+	//   其余全部默认：--crf 17 --preset medium --band 0.58 --engine temporal
+	//   ProPainter 旋钮未透传（本版无旗标），模型默认 mask_dilation=4 /
+	//   raft_iter=20 / neighbor_length=10。产物生成于 2026-09-17 23:21。
 	out := fs.String("o", "", "output file (required)")
 	engine := fs.String("engine", "temporal", "temporal|delogo")
 	bandFrac := addBandFlags(fs)
-	crf := fs.Int("crf", 17, "x264 CRF")
+	crf := fs.Int("crf", 17, "x264 CRF") // 存档: 本片用默认 17
 	preset := fs.String("preset", "medium", "x264 preset")
 	maxGap := fs.Int("max-gap", 3, "max gap frames inside one event")
 	sceneThr := fs.Float64("scene-thr", 0.35, "scene cut threshold (0 disables)")
@@ -215,10 +221,10 @@ func cmdRemove(args []string) error {
 	ocrScript := fs.String("ocr-script", "scripts/ocr_boxes.py", "path to the OCR sidecar script")
 	ocrStride := fs.Int("ocr-stride", 12, "OCR every Nth frame")
 	alphaOn := fs.Bool("alpha", false, "unmix semi-transparent backdrop bars instead of inpainting them")
-	painterOn := fs.Bool("propainter", false, "enable the ProPainter sidecar for generative-tier events")
+	painterOn := fs.Bool("propainter", false, "enable the ProPainter sidecar for generative-tier events") // 存档: 本片启用
 	painterScript := fs.String("propainter-script", "scripts/propainter_infer.py", "path to the ProPainter sidecar script")
-	grainOn := fs.Bool("grain", false, "match repaired-area texture (noise, chroma, blockiness) to the source")
-	forceEngine := fs.String("force-engine", "", "override routing for every event: motion|propainter")
+	grainOn := fs.Bool("grain", false, "match repaired-area texture (noise, chroma, blockiness) to the source") // 存档: 本片启用, 与 slice1_pp.mp4 的唯一差别
+	forceEngine := fs.String("force-engine", "", "override routing for every event: motion|propainter")        // 存档: 本片强制 propainter
 	manifestOut := fs.String("manifest", "", "write a run manifest for segment reruns")
 	riskList := fs.String("risk-list", "", "write the high-risk segment list as JSON")
 	riskCov := fs.Float64("risk-coverage", 0.35, "coverage threshold below which an event is flagged high-risk")
