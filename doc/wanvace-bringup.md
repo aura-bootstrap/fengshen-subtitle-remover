@@ -31,17 +31,15 @@ scripts/wanvace_check.sh /path/to/Wan2.1   # 全绿才可进下一步
 1. **参数名**：当前 generate.py 的 VACE 参数为 `--task vace-1.3B --size W*H --frame_num N --ckpt_dir --src_video --src_mask --prompt --save_file`；若上游改名，改 `wanvace_infer.py` 里 cmd 构造段。
 2. **mask 极性**：sidecar 按"白=重生成"编码 mask 视频；若首跑结果把字幕区当保留区，反转 `wanvace_infer.py` 里 `np.where(mk > 127, 255, 0)`。
 3. **帧数约束**：Wan 因果 VAE 只接受 4k+1 帧，sidecar 已自动补齐（末帧重复+黑 mask），无需手工处理。
-4. **显存溢出**：先 `WANVACE_OFFLOAD=1`；再不行把 `WANVACE_SIZE` 降到 `640*360`。
+4. **显存溢出**：vace-1.3B 的 `--size` 只有预设档（720*1280/1280*720/480*832/832*480/1024*1024），没有更小的横版可降。16GB 卡实测可用配置（4060 Ti 联调定版）：`WANVACE_OFFLOAD=1` + `WANVACE_T5_CPU=1`（T5 挪 CPU 省 ~5GB）+ `WANVACE_FRAME_NUM=1`（帧数自适应块长，不再强制 81 帧），832*480 峰值约 12GB。
+5. **依赖**：`dashscope` 和 `decord` 是硬需求——generate.py 模块级导入 prompt_extend（顶层 import dashscope），vace_processor 推理时惰性 import decord；两者都已在 desub:cu124-wan 镜像内。
 
 ## 联调步骤
 
 ```bash
-# 容器/环境里
-export WANVACE_HOME=/work/vendor/Wan2.1
-export WANVACE_CKPT=$WANVACE_HOME/Wan2.1-VACE-1.3B
-export WANVACE_OFFLOAD=1
-
-# 用 rand_ep1（4s/103 帧）做首个联调片段
+# WANVACE_* 旋钮由 run_container.sh 从宿主环境透传（HOME/CKPT 有容器内默认值）
+DESUB_GPUS=all DESUB_IMAGE=desub:cu124-wan \
+WANVACE_OFFLOAD=1 WANVACE_T5_CPU=1 WANVACE_FRAME_NUM=1 \
 bash scripts/run_container.sh remove data/raw/rand_ep1.mp4 \
   -o data/out/rand_ep1_vace.mp4 \
   --propainter --force-engine propainter \
