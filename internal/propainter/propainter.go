@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/aura-bootstrap/fengshen-subtitle-remover/internal/engine"
@@ -28,6 +29,10 @@ type Client struct {
 	Timeout   time.Duration // per chunk
 	ChunkSize int           // frames per inference chunk (40–80 per R5.3)
 	Overlap   int           // cross-fade frames between chunks (8–16)
+	// Concurrency bounds how many chunk sidecars run at once (<=1: serial).
+	// Chunks are independent subprocesses; overlap cross-fading still happens
+	// in chunk order after all results land, so output is identical to serial.
+	Concurrency int
 
 	Home           string // PROPAINTER_HOME passed to the sidecar subprocess
 	MaskDilation   int    // PROPAINTER_MASK_DILATION (0: model default 4)
@@ -143,14 +148,40 @@ func (c *Client) Inpaint(j engine.PaintJob) ([][]byte, error) {
 		return nil, err
 	}
 
-	out := make([][]byte, n)
-	weight := make([]float64, n) // accumulated cross-fade weights
-	acc := make([][]float64, n)
-	for _, ch := range chunks {
-		frames, err := c.runChunk(jobDir, ch, j.FPS, j.StartF)
+	results := make([][][]byte, len(chunks))
+	k := c.Concurrency
+	if k < 1 {
+		k = 1
+	}
+	sem := make(chan struct{}, k)
+	errs := make([]error, len(chunks))
+	var wg sync.WaitGroup
+	for i, ch := range chunks {
+		wg.Add(1)
+		go func(i int, ch [2]int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			frames, err := c.runChunk(jobDir, ch, j.FPS, j.StartF)
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			results[i] = frames
+		}(i, ch)
+	}
+	wg.Wait()
+	for _, err := range errs {
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	out := make([][]byte, n)
+	weight := make([]float64, n) // accumulated cross-fade weights
+	acc := make([][]float64, n)
+	for ci, ch := range chunks {
+		frames := results[ci]
 		// Cross-fade: inside an overlap the later chunk's weight ramps 0→1.
 		for k, fr := range frames {
 			fi := ch[0] + k - j.StartF

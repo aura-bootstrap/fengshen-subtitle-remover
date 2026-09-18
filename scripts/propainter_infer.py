@@ -97,7 +97,6 @@ def main():
 
     work = os.path.join(args.out, ".work")
     os.makedirs(work, exist_ok=True)
-    sub_video = os.path.join(work, "chunk.mp4")
     frames_dir_in = os.path.join(work, "frames")
     mask_dir = os.path.join(work, "mask")
     os.makedirs(frames_dir_in, exist_ok=True)
@@ -105,22 +104,18 @@ def main():
     for k in range(n):
         cv2.imwrite(os.path.join(frames_dir_in, "%05d.png" % k), frames[k][y0:y1, :])
         cv2.imwrite(os.path.join(mask_dir, "%05d.png" % k), masks[k][y0:y1, :])
-    # Lossless intermediate (R5.1): x264rgb qp 0 keeps every pixel intact.
-    ff = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
-                         "-framerate", "%.6f" % args.fps,
-                         "-i", os.path.join(frames_dir_in, "%05d.png"),
-                         "-c:v", "libx264rgb", "-qp", "0", sub_video],
-                        capture_output=True, text=True)
-    if ff.returncode != 0:
-        fail(f"ffmpeg: {ff.stderr[-300:]}")
 
     model_out = os.path.join(work, "result")
     env = dict(os.environ)
+    # inference.py accepts a frames directory for --video (fps falls back to
+    # --save_fps); the lossless x264rgb intermediate would only add a CPU-side
+    # encode+decode round trip per chunk.
     cmd = [sys.executable, infer_py,
            "--mode", "video_inpainting",
-           "--video", sub_video,
+           "--video", frames_dir_in,
            "--mask", mask_dir,
-           "--output", model_out]
+           "--output", model_out,
+           "--save_fps", "%d" % int(args.fps + 0.5)]
     for env_name, flag in (("PROPAINTER_MASK_DILATION", "--mask_dilation"),
                            ("PROPAINTER_RAFT_ITER", "--raft_iter"),
                            ("PROPAINTER_NEIGHBOR_LENGTH", "--neighbor_length")):

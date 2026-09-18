@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,6 +45,7 @@ type Options struct {
 	OCR                   bool
 	OCRScript             string
 	OCRStride             int
+	OCRConcurrency        int  // 0: DESUB_OCR_CONCURRENCY env or 6
 	Alpha                 bool // semi-transparent bar detection + unmixing
 	ProPainter            bool // enable the ProPainter sidecar for generative-tier events
 	PainterScript         string
@@ -51,6 +53,7 @@ type Options struct {
 	PainterMaskDilation   int    // 0: model default 4
 	PainterRaftIter       int    // 0: model default 20
 	PainterNeighborLength int    // 0: model default 10
+	PainterConcurrency    int    // 0: default 2 concurrent chunk sidecars
 	Grain                 bool   // texture-match the repaired area (internal/grain)
 	ForceEngine           string // R7.5: "motion"|"propainter" overrides the router for every event
 	VLMQC                 bool   // re-judge verify-stage residue boxes with a VLM
@@ -210,7 +213,8 @@ func Run(o Options) (*Report, error) {
 		Cuts: cuts, MaxGap: o.MaxGap,
 		CloseGap: o.CloseGap, CloseOverlap: o.CloseOverlap, EdgePad: o.EdgePad,
 		OCR: ocrClient, OCRStride: o.OCRStride,
-		DumpDir: o.DumpDir, DumpLimit: o.DumpLimit, DumpStride: o.DumpStride,
+		OCRConcurrency: ocrConcurrency(o.OCRConcurrency),
+		DumpDir:        o.DumpDir, DumpLimit: o.DumpLimit, DumpStride: o.DumpStride,
 		Log: o.Log,
 	})
 	if err != nil {
@@ -285,6 +289,7 @@ func Run(o Options) (*Report, error) {
 					cl.MaskDilation = o.PainterMaskDilation
 					cl.RaftIter = o.PainterRaftIter
 					cl.NeighborLength = o.PainterNeighborLength
+					cl.Concurrency = o.PainterConcurrency
 					painter = cl
 				}
 			}
@@ -444,7 +449,20 @@ func Run(o Options) (*Report, error) {
 	return rep, nil
 }
 
-// writeRiskList exports the risk list as indented JSON.
+// ocrConcurrency resolves the OCR sidecar fan-out: explicit option wins,
+// then DESUB_OCR_CONCURRENCY, default 6.
+func ocrConcurrency(v int) int {
+	if v > 0 {
+		return v
+	}
+	if s := os.Getenv("DESUB_OCR_CONCURRENCY"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 6
+}
+
 func writeRiskList(path string, items []RiskItem) error {
 	if items == nil {
 		items = []RiskItem{}

@@ -221,6 +221,7 @@ func cmdRemove(args []string) error {
 	ppMaskDilation := fs.Int("pp-mask-dilation", 8, "ProPainter mask dilation px (validated: 8 removes stroke-halo bleed)")
 	ppRaftIter := fs.Int("pp-raft-iter", 32, "ProPainter RAFT iterations (validated: 32)")
 	ppNeighbor := fs.Int("pp-neighbor-length", 20, "ProPainter local neighbor length (validated: 20)")
+	ppConcurrency := fs.Int("pp-concurrency", 1, "concurrent ProPainter chunk sidecars (GPU-bound; K=2 measured slower on 16GB cards)")
 	grainOn := fs.Bool("grain", false, "match repaired-area texture (noise, chroma, blockiness) to the source")
 	forceEngine := fs.String("force-engine", "", "override routing for every event: motion|propainter")
 	vlmQC := fs.Bool("vlm-qc", false, "re-judge verify-stage residue boxes with a VLM (scripts/vlm_qc.py)")
@@ -262,7 +263,8 @@ func cmdRemove(args []string) error {
 		ProPainter: *painterOn, PainterScript: *painterScript,
 		PainterHome: *painterHome, PainterMaskDilation: *ppMaskDilation,
 		PainterRaftIter: *ppRaftIter, PainterNeighborLength: *ppNeighbor,
-		Grain: *grainOn, ForceEngine: *forceEngine, ManifestPath: *manifestOut,
+		PainterConcurrency: *ppConcurrency,
+		Grain:              *grainOn, ForceEngine: *forceEngine, ManifestPath: *manifestOut,
 		VLMQC: *vlmQC, VLMScript: *vlmScript, VLMEndpoint: *vlmEndpoint, VLMModel: *vlmModel, VLMAPIKey: *vlmAPIKey,
 		RiskListPath: *riskList, RiskCoverage: *riskCov,
 		DumpDir: *dump, DumpLimit: *dumpLimit,
