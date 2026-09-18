@@ -69,6 +69,15 @@ def main():
         masks.append(m)
     h, w = frames[0].shape[:2]
 
+    # ProPainter's RAFT stage crashes on chunks shorter than 3 frames (empty
+    # correlation volume); pad by repeating the last frame and crop the
+    # padding back off at output time.
+    real_n = n
+    while len(frames) < 3:
+        frames.append(frames[-1].copy())
+        masks.append(masks[-1].copy())
+    n = len(frames)
+
     # Vertical context crop around the union mask bbox (R5.2): the model sees
     # the strip plus ~1.75x the mask height of context on each side, never the
     # whole band. Output frames are pasted back at full size.
@@ -78,7 +87,7 @@ def main():
     rows = np.nonzero(ys)[0]
     if len(rows) == 0:
         os.makedirs(args.out, exist_ok=True)
-        for k in range(n):
+        for k in range(real_n):
             cv2.imwrite(os.path.join(args.out, "%05d.png" % (args.start + k)), frames[k])
         return
     mh = rows[-1] - rows[0] + 1
@@ -137,7 +146,7 @@ def main():
         fail(f"inference produced {len(produced)} frames, want {n}")
 
     os.makedirs(args.out, exist_ok=True)
-    for k in range(n):
+    for k in range(real_n):
         sub = load_frame(os.path.join(frames_dir, produced[k]))
         out = frames[k].copy()
         sh = sub.shape[0]
