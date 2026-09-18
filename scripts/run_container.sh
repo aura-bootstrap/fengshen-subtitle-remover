@@ -9,7 +9,7 @@
 # Usage:
 #   scripts/run_container.sh <command...>          # default: bash
 #   scripts/run_container.sh remove data/raw/ep4.mp4 -o data/out/ep4.mp4 --propainter --grain
-# Env overrides: DESUB_IMAGE, DESUB_LAB, DESUB_REPO, DESUB_PROXY, DESUB_BIN, PROPAINTER_HOME
+# Env overrides: DESUB_IMAGE, DESUB_LAB, DESUB_REPO, DESUB_PROXY, DESUB_BIN, DESUB_GPUS, PROPAINTER_HOME
 # NOTE: while a long-running container is executing /src/bin/desub-linux-amd64,
 # do not overwrite that file on the host — new execs of the same path crash
 # (virtiofs bind mount). Build to another name and point DESUB_BIN at it.
@@ -21,6 +21,8 @@ REPO="${DESUB_REPO:-W:/github.com/aura-bootstrap/fengshen-subtitle-remover}"
 PROXY="${DESUB_PROXY:-http://host.docker.internal:7897}"
 PP_HOME="${PROPAINTER_HOME:-/work/vendor/ProPainter}"
 BIN="${DESUB_BIN:-/src/bin/desub-linux-amd64}"
+gpu_args=()
+if [ -n "${DESUB_GPUS:-}" ]; then gpu_args+=(--gpus "$DESUB_GPUS"); fi
 
 if [ $# -eq 0 ]; then
   set -- bash
@@ -47,6 +49,7 @@ case "${1:-}" in
 esac
 
 MSYS_NO_PATHCONV=1 docker run --rm \
+  "${gpu_args[@]}" \
   -v "${LAB}:/work" \
   -v "${REPO}:/src" \
   -w /work \
