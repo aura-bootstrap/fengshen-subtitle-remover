@@ -49,6 +49,7 @@ func RunDelogo(o DelogoOptions) error {
 	args = append(args, o.EncColor...)
 	args = append(args,
 		"-c:v", "libx264", "-crf", fmt.Sprint(o.CRF), "-preset", o.Preset,
+		"-threads", fmt.Sprint(ffx.CPUWorkers()),
 		"-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", o.Output)
 	return ffx.Run(args...)
 }

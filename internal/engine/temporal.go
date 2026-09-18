@@ -433,6 +433,7 @@ func temporalEncoderArgs(o TemporalOptions, w, hb, by int) []string {
 	args = append(args, o.EncColor...)
 	return append(args,
 		"-c:v", "libx264", "-crf", fmt.Sprint(o.CRF), "-preset", o.Preset,
+		"-threads", fmt.Sprint(ffx.CPUWorkers()),
 		"-c:a", "copy", "-movflags", "+faststart", o.Output)
 }
 

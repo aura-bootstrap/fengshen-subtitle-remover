@@ -10,12 +10,31 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 )
 
 func FFmpeg() string  { return binName("ffmpeg") }
 func FFprobe() string { return binName("ffprobe") }
+
+// CPUWorkers returns the default concurrency for Go worker pools and ffmpeg
+// -threads: 80% of the logical cores (DESUB_CPU_PCT overrides the
+// percentage), capped at 25, at least 1.
+func CPUWorkers() int {
+	pct := 80
+	if v, err := strconv.Atoi(os.Getenv("DESUB_CPU_PCT")); err == nil && v > 0 && v <= 100 {
+		pct = v
+	}
+	w := runtime.NumCPU() * pct / 100
+	if w > 25 {
+		w = 25
+	}
+	if w < 1 {
+		w = 1
+	}
+	return w
+}
 
 func binName(def string) string {
 	if v := os.Getenv("DESUB_" + strings.ToUpper(def)); v != "" {
