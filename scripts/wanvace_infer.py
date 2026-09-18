@@ -76,11 +76,11 @@ def main():
     gen_py = os.path.join(home, "generate.py")
     if not os.path.isfile(gen_py):
         fail(f"{gen_py} missing; sidecar unavailable")
-    task = os.environ.get("WANVACE_TASK", "vace-1.3B")
-    ckpt = os.environ.get("WANVACE_CKPT", os.path.join(home, "Wan2.1-VACE-1.3B"))
+    task = os.environ.get("WANVACE_TASK") or "vace-1.3B"
+    ckpt = os.environ.get("WANVACE_CKPT") or os.path.join(home, "Wan2.1-VACE-1.3B")
     if not os.path.isdir(ckpt):
         fail(f"checkpoint dir {ckpt} missing (WANVACE_CKPT)")
-    size_w, size_h = parse_size(os.environ.get("WANVACE_SIZE", "832*480"))
+    size_w, size_h = parse_size(os.environ.get("WANVACE_SIZE") or "832*480")
     try:
         import cv2
         import numpy as np
@@ -116,7 +116,7 @@ def main():
 
     # Wan causal VAE consumes 4k+1 frames; pad by repeating the last frame
     # with a black (keep-everything) mask and drop the padding afterwards.
-    min_fn = int(os.environ.get("WANVACE_FRAME_NUM", "81"))
+    min_fn = int(os.environ.get("WANVACE_FRAME_NUM") or "81")
     fn = max(min_fn, 4 * math.ceil(max(n - 1, 0) / 4) + 1)
 
     work = os.path.join(args.out, ".work-vace")
@@ -160,7 +160,7 @@ def main():
            "--ckpt_dir", ckpt,
            "--src_video", sub_video,
            "--src_mask", mask_video,
-           "--prompt", os.environ.get("WANVACE_PROMPT", "clean background, no text"),
+           "--prompt", os.environ.get("WANVACE_PROMPT") or "clean background, no text",
            "--save_file", result_video]
     if os.environ.get("WANVACE_NEG_PROMPT"):
         cmd += ["--sample_neg_prompt", os.environ["WANVACE_NEG_PROMPT"]]

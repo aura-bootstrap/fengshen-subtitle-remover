@@ -48,6 +48,11 @@ case "${1:-}" in
   detect|probe) set -- "$BIN" "$@" ;;
 esac
 
+wanvace_env=()
+for v in WANVACE_OFFLOAD WANVACE_T5_CPU WANVACE_SIZE WANVACE_FRAME_NUM WANVACE_STEPS WANVACE_TASK; do
+  if [ -n "${!v:-}" ]; then wanvace_env+=(-e "$v=${!v}"); fi
+done
+
 MSYS_NO_PATHCONV=1 docker run --rm \
   "${gpu_args[@]}" \
   -v "${LAB}:/work" \
@@ -61,10 +66,5 @@ MSYS_NO_PATHCONV=1 docker run --rm \
   -e PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
   -e WANVACE_HOME="${WANVACE_HOME:-/work/vendor/Wan2.1}" \
   -e WANVACE_CKPT="${WANVACE_CKPT:-/work/vendor/Wan2.1/Wan2.1-VACE-1.3B}" \
-  -e WANVACE_OFFLOAD="${WANVACE_OFFLOAD:-}" \
-  -e WANVACE_T5_CPU="${WANVACE_T5_CPU:-}" \
-  -e WANVACE_SIZE="${WANVACE_SIZE:-}" \
-  -e WANVACE_FRAME_NUM="${WANVACE_FRAME_NUM:-}" \
-  -e WANVACE_STEPS="${WANVACE_STEPS:-}" \
-  -e WANVACE_TASK="${WANVACE_TASK:-}" \
+  "${wanvace_env[@]}" \
   "${IMAGE}" "$@"
