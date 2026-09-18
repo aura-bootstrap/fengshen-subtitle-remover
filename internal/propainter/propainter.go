@@ -28,6 +28,11 @@ type Client struct {
 	Timeout   time.Duration // per chunk
 	ChunkSize int           // frames per inference chunk (40–80 per R5.3)
 	Overlap   int           // cross-fade frames between chunks (8–16)
+
+	Home           string // PROPAINTER_HOME passed to the sidecar subprocess
+	MaskDilation   int    // PROPAINTER_MASK_DILATION (0: model default 4)
+	RaftIter       int    // PROPAINTER_RAFT_ITER (0: model default 20)
+	NeighborLength int    // PROPAINTER_NEIGHBOR_LENGTH (0: model default 10)
 }
 
 // NewClient checks the sidecar script exists and returns a client with the
@@ -200,6 +205,23 @@ func (c *Client) runChunk(jobDir string, ch [2]int, fps float64, jobStart int) (
 		"--start", fmt.Sprint(ch[0]-jobStart),
 		"--count", fmt.Sprint(ch[1]-ch[0]+1),
 		"--fps", fmt.Sprintf("%.6f", fps))
+	var env []string
+	if c.Home != "" {
+		env = append(os.Environ(), "PROPAINTER_HOME="+c.Home)
+	}
+	for _, kv := range [][2]string{
+		{"PROPAINTER_MASK_DILATION", fmt.Sprint(c.MaskDilation)},
+		{"PROPAINTER_RAFT_ITER", fmt.Sprint(c.RaftIter)},
+		{"PROPAINTER_NEIGHBOR_LENGTH", fmt.Sprint(c.NeighborLength)},
+	} {
+		if kv[1] != "0" {
+			if env == nil {
+				env = os.Environ()
+			}
+			env = append(env, kv[0]+"="+kv[1])
+		}
+	}
+	cmd.Env = env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

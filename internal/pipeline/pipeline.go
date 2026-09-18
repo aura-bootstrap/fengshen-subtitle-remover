@@ -25,36 +25,40 @@ import (
 )
 
 type Options struct {
-	Input          string
-	Output         string
-	Engine         string // temporal | delogo
-	BandStart      float64
-	CRF            int
-	Preset         string
-	MaxGap         int
-	SceneThreshold float64
-	Neighbors      int
-	Pad            int
-	Motion         bool // temporal engine: motion-compensated pixel transfer
-	CloseGap       int  // temporal closing window in frames (subs)
-	CloseOverlap   float64
-	EdgePad        int // frames padded before/after each event
-	OCR            bool
-	OCRScript      string
-	OCRStride      int
-	Alpha          bool // semi-transparent bar detection + unmixing
-	ProPainter     bool // enable the ProPainter sidecar for generative-tier events
-	PainterScript  string
-	Grain          bool // texture-match the repaired area (internal/grain)
-	ForceEngine    string // R7.5: "motion"|"propainter" overrides the router for every event
-	ManifestPath   string
-	RiskListPath   string  // write the high-risk segment list (R6) as JSON
-	RiskCoverage   float64 // coverage threshold below which an event is high-risk (0 uses the default)
-	DumpDir        string
-	DumpLimit      int
-	DumpStride     int
-	Verify         bool
-	Log            io.Writer
+	Input                 string
+	Output                string
+	Engine                string // temporal | delogo
+	BandStart             float64
+	CRF                   int
+	Preset                string
+	MaxGap                int
+	SceneThreshold        float64
+	Neighbors             int
+	Pad                   int
+	Motion                bool // temporal engine: motion-compensated pixel transfer
+	CloseGap              int  // temporal closing window in frames (subs)
+	CloseOverlap          float64
+	EdgePad               int // frames padded before/after each event
+	OCR                   bool
+	OCRScript             string
+	OCRStride             int
+	Alpha                 bool // semi-transparent bar detection + unmixing
+	ProPainter            bool // enable the ProPainter sidecar for generative-tier events
+	PainterScript         string
+	PainterHome           string // PROPAINTER_HOME for the sidecar (empty: inherit env)
+	PainterMaskDilation   int    // 0: model default 4
+	PainterRaftIter       int    // 0: model default 20
+	PainterNeighborLength int    // 0: model default 10
+	Grain                 bool   // texture-match the repaired area (internal/grain)
+	ForceEngine           string // R7.5: "motion"|"propainter" overrides the router for every event
+	ManifestPath          string
+	RiskListPath          string  // write the high-risk segment list (R6) as JSON
+	RiskCoverage          float64 // coverage threshold below which an event is high-risk (0 uses the default)
+	DumpDir               string
+	DumpLimit             int
+	DumpStride            int
+	Verify                bool
+	Log                   io.Writer
 }
 
 // EventCoverage summarizes how much of an event's masked area was repaired
@@ -261,6 +265,10 @@ func Run(o Options) (*Report, error) {
 				if cl, cerr := propainter.NewClient(o.PainterScript, 0); cerr != nil {
 					fmt.Fprintf(o.Log, "warn: propainter unavailable: %v; generative events fall back to motion\n", cerr)
 				} else {
+					cl.Home = o.PainterHome
+					cl.MaskDilation = o.PainterMaskDilation
+					cl.RaftIter = o.PainterRaftIter
+					cl.NeighborLength = o.PainterNeighborLength
 					painter = cl
 				}
 			}

@@ -217,6 +217,10 @@ func cmdRemove(args []string) error {
 	alphaOn := fs.Bool("alpha", false, "unmix semi-transparent backdrop bars instead of inpainting them")
 	painterOn := fs.Bool("propainter", false, "enable the ProPainter sidecar for generative-tier events")
 	painterScript := fs.String("propainter-script", "scripts/propainter_infer.py", "path to the ProPainter sidecar script")
+	painterHome := fs.String("propainter-home", "", "PROPAINTER_HOME checkout dir for the sidecar (empty: inherit env)")
+	ppMaskDilation := fs.Int("pp-mask-dilation", 8, "ProPainter mask dilation px (validated: 8 removes stroke-halo bleed)")
+	ppRaftIter := fs.Int("pp-raft-iter", 32, "ProPainter RAFT iterations (validated: 32)")
+	ppNeighbor := fs.Int("pp-neighbor-length", 20, "ProPainter local neighbor length (validated: 20)")
 	grainOn := fs.Bool("grain", false, "match repaired-area texture (noise, chroma, blockiness) to the source")
 	forceEngine := fs.String("force-engine", "", "override routing for every event: motion|propainter")
 	manifestOut := fs.String("manifest", "", "write a run manifest for segment reruns")
@@ -251,6 +255,8 @@ func cmdRemove(args []string) error {
 		OCR: *ocrOn, OCRScript: *ocrScript, OCRStride: *ocrStride,
 		Alpha:      *alphaOn,
 		ProPainter: *painterOn, PainterScript: *painterScript,
+		PainterHome: *painterHome, PainterMaskDilation: *ppMaskDilation,
+		PainterRaftIter: *ppRaftIter, PainterNeighborLength: *ppNeighbor,
 		Grain: *grainOn, ForceEngine: *forceEngine, ManifestPath: *manifestOut,
 		RiskListPath: *riskList, RiskCoverage: *riskCov,
 		DumpDir: *dump, DumpLimit: *dumpLimit,
