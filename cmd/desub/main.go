@@ -223,6 +223,11 @@ func cmdRemove(args []string) error {
 	ppNeighbor := fs.Int("pp-neighbor-length", 20, "ProPainter local neighbor length (validated: 20)")
 	grainOn := fs.Bool("grain", false, "match repaired-area texture (noise, chroma, blockiness) to the source")
 	forceEngine := fs.String("force-engine", "", "override routing for every event: motion|propainter")
+	vlmQC := fs.Bool("vlm-qc", false, "re-judge verify-stage residue boxes with a VLM (scripts/vlm_qc.py)")
+	vlmScript := fs.String("vlm-script", "scripts/vlm_qc.py", "path to the VLM QC sidecar script")
+	vlmEndpoint := fs.String("vlm-endpoint", "", "OpenAI-compatible VLM base URL (default: local ollama)")
+	vlmModel := fs.String("vlm-model", "", "VLM model name (default: qwen2.5vl:7b)")
+	vlmAPIKey := fs.String("vlm-api-key", "", "VLM API key (local servers ignore it)")
 	manifestOut := fs.String("manifest", "", "write a run manifest for segment reruns")
 	riskList := fs.String("risk-list", "", "write the high-risk segment list as JSON")
 	riskCov := fs.Float64("risk-coverage", 0.35, "coverage threshold below which an event is flagged high-risk")
@@ -258,6 +263,7 @@ func cmdRemove(args []string) error {
 		PainterHome: *painterHome, PainterMaskDilation: *ppMaskDilation,
 		PainterRaftIter: *ppRaftIter, PainterNeighborLength: *ppNeighbor,
 		Grain: *grainOn, ForceEngine: *forceEngine, ManifestPath: *manifestOut,
+		VLMQC: *vlmQC, VLMScript: *vlmScript, VLMEndpoint: *vlmEndpoint, VLMModel: *vlmModel, VLMAPIKey: *vlmAPIKey,
 		RiskListPath: *riskList, RiskCoverage: *riskCov,
 		DumpDir: *dump, DumpLimit: *dumpLimit,
 		DumpStride: *dumpStride, Verify: *verify, Log: os.Stderr,

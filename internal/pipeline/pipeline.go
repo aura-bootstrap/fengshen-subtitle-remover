@@ -22,6 +22,7 @@ import (
 	"github.com/aura-bootstrap/fengshen-subtitle-remover/internal/report"
 	"github.com/aura-bootstrap/fengshen-subtitle-remover/internal/route"
 	"github.com/aura-bootstrap/fengshen-subtitle-remover/internal/subs"
+	"github.com/aura-bootstrap/fengshen-subtitle-remover/internal/vlmqc"
 )
 
 type Options struct {
@@ -51,6 +52,11 @@ type Options struct {
 	PainterNeighborLength int    // 0: model default 10
 	Grain                 bool   // texture-match the repaired area (internal/grain)
 	ForceEngine           string // R7.5: "motion"|"propainter" overrides the router for every event
+	VLMQC                 bool   // re-judge verify-stage residue boxes with a VLM
+	VLMScript             string // path to scripts/vlm_qc.py (empty: default relative path)
+	VLMEndpoint           string // OpenAI-compatible base URL (empty: local ollama default)
+	VLMModel              string // VLM model name (empty: qwen2.5vl:7b)
+	VLMAPIKey             string
 	ManifestPath          string
 	RiskListPath          string  // write the high-risk segment list (R6) as JSON
 	RiskCoverage          float64 // coverage threshold below which an event is high-risk (0 uses the default)
@@ -140,6 +146,7 @@ type Report struct {
 	Fallback    []int            `json:"fallback,omitempty"`
 	Residual    *Detection       `json:"residual,omitempty"`
 	ResidueList []ResidueBox     `json:"residue_list,omitempty"`
+	VLMQC       []vlmqc.Verdict  `json:"vlm_qc,omitempty"`
 	Risk        []RiskItem       `json:"risk,omitempty"`
 	// CoverageTotal is Σreal/Σmasked over all events (R4.7 acceptance).
 	CoverageTotal float64 `json:"coverage_total,omitempty"`
@@ -348,6 +355,35 @@ func Run(o Options) (*Report, error) {
 		rep.Residual = &res
 		fmt.Fprintf(o.Log, "verify: %d/%d frames still detected, %d boxes, %d overlapping original subtitle regions (%.1fs)\n",
 			res.TextFrames, res.Frames, res.Boxes, res.ResidueBoxes, time.Since(t0).Seconds())
+	}
+	if o.VLMQC && len(rep.ResidueList) > 0 {
+		t0 := time.Now()
+		cl, err := vlmqc.NewClient(o.VLMScript, o.VLMEndpoint, o.VLMModel, o.VLMAPIKey)
+		if err != nil {
+			fmt.Fprintf(o.Log, "warn: vlm-qc unavailable: %v\n", err)
+		} else {
+			boxes := make([]vlmqc.Box, len(rep.ResidueList))
+			for i, r := range rep.ResidueList {
+				boxes[i] = vlmqc.Box{Frame: r.Frame, Time: r.Time, X: r.X, Y: r.Y, W: r.W, H: r.H}
+			}
+			verdicts, rerr := cl.Review(o.Output, boxes)
+			if rerr != nil {
+				fmt.Fprintf(o.Log, "warn: vlm-qc failed, threshold counts kept: %v\n", rerr)
+			} else {
+				rep.VLMQC = verdicts
+				confirmed, unclear := 0, 0
+				for _, v := range verdicts {
+					switch {
+					case v.Residue == nil:
+						unclear++
+					case *v.Residue:
+						confirmed++
+					}
+				}
+				fmt.Fprintf(o.Log, "vlm-qc: %d boxes reviewed, %d confirmed residue, %d texture, %d unclear (%.1fs)\n",
+					len(verdicts), confirmed, len(verdicts)-confirmed-unclear, unclear, time.Since(t0).Seconds())
+			}
+		}
 	}
 	rep.ElapsedSec = time.Since(start).Seconds()
 	if o.Output != "" {
