@@ -493,10 +493,10 @@ func fuseOCR(o Options, frames []events.Frame, masks []mask.Frame) int {
 						bits[i] |= v
 					}
 				} else {
-					rasterizeRect(bits, o.W, ob.Rect)
+					rasterizeRect(bits, o.W, o.Band.H, ob.Rect)
 				}
 			} else {
-				rasterizeRect(bits, o.W, ob.Rect)
+				rasterizeRect(bits, o.W, o.Band.H, ob.Rect)
 			}
 			masks[f] = mask.Encode(bits, o.W, o.Band.H)
 		}
@@ -504,9 +504,13 @@ func fuseOCR(o Options, frames []events.Frame, masks []mask.Frame) int {
 	return added
 }
 
-func rasterizeRect(bits []uint8, w int, r imgx.Rect) {
-	for y := r.Y; y < r.Y+r.H; y++ {
-		for x := r.X; x < r.X+r.W; x++ {
+func rasterizeRect(bits []uint8, w, h int, r imgx.Rect) {
+	x0 := max(0, r.X)
+	y0 := max(0, r.Y)
+	x1 := min(w, r.X+r.W)
+	y1 := min(h, r.Y+r.H)
+	for y := y0; y < y1; y++ {
+		for x := x0; x < x1; x++ {
 			bits[y*w+x] = 1
 		}
 	}
