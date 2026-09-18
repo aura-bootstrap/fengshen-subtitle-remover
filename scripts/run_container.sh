@@ -49,7 +49,7 @@ case "${1:-}" in
 esac
 
 wanvace_env=()
-for v in WANVACE_OFFLOAD WANVACE_T5_CPU WANVACE_SIZE WANVACE_FRAME_NUM WANVACE_STEPS WANVACE_TASK; do
+for v in WANVACE_OFFLOAD WANVACE_T5_CPU WANVACE_SIZE WANVACE_FRAME_NUM WANVACE_STEPS WANVACE_TASK PYTORCH_CUDA_ALLOC_CONF; do
   if [ -n "${!v:-}" ]; then wanvace_env+=(-e "$v=${!v}"); fi
 done
 
