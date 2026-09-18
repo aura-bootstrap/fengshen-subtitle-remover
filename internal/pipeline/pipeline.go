@@ -189,7 +189,15 @@ func Run(o Options) (*Report, error) {
 		if script == "" {
 			script = "scripts/ocr_boxes.py"
 		}
-		c, err := ocr.NewClient(script, 0)
+		// CPU OCR costs seconds per frame; the fixed 10-minute default kills
+		// long videos mid-request (sidecar EOF), so scale the cap with the
+		// estimated workload.
+		estFrames := int(info.Duration*info.FPS)/max(o.OCRStride, 1) + 1
+		timeout := 10 * time.Minute
+		if d := time.Duration(estFrames) * 10 * time.Second; d > timeout {
+			timeout = d
+		}
+		c, err := ocr.NewClient(script, timeout)
 		if err != nil {
 			fmt.Fprintf(o.Log, "warn: ocr disabled: %v\n", err)
 		} else {
