@@ -59,4 +59,7 @@ MSYS_NO_PATHCONV=1 docker run --rm \
   -e NO_PROXY="host.docker.internal,127.0.0.1,localhost" \
   -e PROPAINTER_HOME="${PP_HOME}" \
   -e PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
+  -e WANVACE_HOME="${WANVACE_HOME:-/work/vendor/Wan2.1}" \
+  -e WANVACE_CKPT="${WANVACE_CKPT:-/work/vendor/Wan2.1/Wan2.1-VACE-1.3B}" \
+  -e WANVACE_OFFLOAD="${WANVACE_OFFLOAD:-}" \
   "${IMAGE}" "$@"
