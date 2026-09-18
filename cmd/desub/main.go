@@ -218,6 +218,7 @@ func cmdRemove(args []string) error {
 	painterOn := fs.Bool("propainter", false, "enable the ProPainter sidecar for generative-tier events")
 	painterScript := fs.String("propainter-script", "scripts/propainter_infer.py", "path to the ProPainter sidecar script")
 	grainOn := fs.Bool("grain", false, "match repaired-area texture (noise, chroma, blockiness) to the source")
+	forceEngine := fs.String("force-engine", "", "override routing for every event: motion|propainter")
 	manifestOut := fs.String("manifest", "", "write a run manifest for segment reruns")
 	riskList := fs.String("risk-list", "", "write the high-risk segment list as JSON")
 	riskCov := fs.Float64("risk-coverage", 0.35, "coverage threshold below which an event is flagged high-risk")
@@ -232,6 +233,11 @@ func cmdRemove(args []string) error {
 	if len(pos) != 1 || *out == "" {
 		return fmt.Errorf("usage: desub remove <video> -o <output.mp4> [flags]")
 	}
+	switch *forceEngine {
+	case "", "motion", "propainter":
+	default:
+		return fmt.Errorf("force-engine: unknown engine %q (want motion|propainter)", *forceEngine)
+	}
 	if *dump != "" {
 		if err := os.MkdirAll(*dump, 0o755); err != nil {
 			return err
@@ -245,7 +251,7 @@ func cmdRemove(args []string) error {
 		OCR: *ocrOn, OCRScript: *ocrScript, OCRStride: *ocrStride,
 		Alpha:      *alphaOn,
 		ProPainter: *painterOn, PainterScript: *painterScript,
-		Grain: *grainOn, ManifestPath: *manifestOut,
+		Grain: *grainOn, ForceEngine: *forceEngine, ManifestPath: *manifestOut,
 		RiskListPath: *riskList, RiskCoverage: *riskCov,
 		DumpDir: *dump, DumpLimit: *dumpLimit,
 		DumpStride: *dumpStride, Verify: *verify, Log: os.Stderr,

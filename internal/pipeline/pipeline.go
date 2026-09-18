@@ -46,6 +46,7 @@ type Options struct {
 	ProPainter     bool // enable the ProPainter sidecar for generative-tier events
 	PainterScript  string
 	Grain          bool // texture-match the repaired area (internal/grain)
+	ForceEngine    string // R7.5: "motion"|"propainter" overrides the router for every event
 	ManifestPath   string
 	RiskListPath   string  // write the high-risk segment list (R6) as JSON
 	RiskCoverage   float64 // coverage threshold below which an event is high-risk (0 uses the default)
@@ -254,7 +255,7 @@ func Run(o Options) (*Report, error) {
 				}
 				fmt.Fprintf(o.Log, "mags: n=%d min=%.2f max=%.2f mean=%.2f\n", len(mags), lo, hi, sum/float64(len(mags)))
 			}
-			rep.Routing = route.Dispatch(plan, info.W, mags, nil, "")
+			rep.Routing = route.Dispatch(plan, info.W, mags, nil, o.ForceEngine)
 			var painter engine.Painter
 			if o.ProPainter {
 				if cl, cerr := propainter.NewClient(o.PainterScript, 0); cerr != nil {
