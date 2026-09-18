@@ -52,9 +52,11 @@ MSYS_NO_PATHCONV=1 docker run --rm \
   "${gpu_args[@]}" \
   -v "${LAB}:/work" \
   -v "${REPO}:/src" \
+  -v "${LAB}/docker/paddlex:/root/.paddlex" \
   -w /work \
   -e HTTP_PROXY="${PROXY}" \
   -e HTTPS_PROXY="${PROXY}" \
   -e NO_PROXY="host.docker.internal,127.0.0.1,localhost" \
   -e PROPAINTER_HOME="${PP_HOME}" \
+  -e PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
   "${IMAGE}" "$@"
