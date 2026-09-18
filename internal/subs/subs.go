@@ -5,11 +5,11 @@
 package subs
 
 import (
-	"os"
 	"fmt"
 	"io"
-	"runtime"
+	"os"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -53,22 +53,23 @@ type Plan struct {
 }
 
 type Options struct {
-	Input        string
-	W            int
-	FPS          float64
-	Band         Band
-	Params       detect.Params
-	Cuts         []float64
-	MaxGap       int
-	CloseGap     int     // temporal closing window in frames; events closer than this with matching boxes merge
-	CloseOverlap float64 // min intersection-over-smaller-box for merging adjacent events
-	EdgePad      int     // frames padded before/after each event to cover fade-in/out residue
-	DumpDir      string
-	DumpLimit    int
-	DumpStride   int
-	OCR          *ocr.Client // nil disables OCR fusion
-	OCRStride    int         // sample every Nth frame for OCR; default 12
-	Log          io.Writer
+	Input          string
+	W              int
+	FPS            float64
+	Band           Band
+	Params         detect.Params
+	Cuts           []float64
+	MaxGap         int
+	CloseGap       int     // temporal closing window in frames; events closer than this with matching boxes merge
+	CloseOverlap   float64 // min intersection-over-smaller-box for merging adjacent events
+	EdgePad        int     // frames padded before/after each event to cover fade-in/out residue
+	DumpDir        string
+	DumpLimit      int
+	DumpStride     int
+	OCR            *ocr.Client // nil disables OCR fusion
+	OCRStride      int         // sample every Nth frame for OCR; default 12
+	OCRConcurrency int         // parallel OCR sidecar processes; <=1: single serial call
+	Log            io.Writer
 }
 
 // ComputeBand picks the subtitle band; the y offset stays even so yuv420p
@@ -266,13 +267,7 @@ func Measure(input string, w int, b Band, params detect.Params, storeMasks bool,
 		mf      mask.Frame
 		textPix int
 	}
-	workers := runtime.NumCPU()
-	if workers > 8 {
-		workers = 8
-	}
-	if workers < 1 {
-		workers = 1
-	}
+	workers := ffx.CPUWorkers()
 	jobs := make(chan job, workers*2)
 	outs := make(chan detOut, workers*2)
 	pool := make(chan []byte, workers)
@@ -356,25 +351,38 @@ func Measure(input string, w int, b Band, params detect.Params, storeMasks bool,
 	return frames, masks, det, nil
 }
 
-// extractBandFrame re-reads one frame's gray band via ffmpeg's select filter;
-// used to refine OCR boxes, so it only runs on the few frames where OCR found
-// text the classical detector missed.
-func extractBandFrame(input string, f, w int, b Band) ([]uint8, error) {
-	vf := fmt.Sprintf("select='eq(n,%d)',crop=%d:%d:0:%d,format=gray", f, w, b.H, b.Y)
+// extractBandFrames pulls many band frames in ONE ffmpeg pass: select emits
+// the requested frames in ascending order, so the i-th decoded frame maps to
+// fs[i]. Frames the stream fails to deliver are simply absent from the map.
+func extractBandFrames(input string, fs []int, w int, b Band) (map[int][]uint8, error) {
+	out := make(map[int][]uint8, len(fs))
+	if len(fs) == 0 {
+		return out, nil
+	}
+	srt := append([]int(nil), fs...)
+	sort.Ints(srt)
+	var sb strings.Builder
+	for i, f := range srt {
+		if i > 0 {
+			sb.WriteByte('+')
+		}
+		fmt.Fprintf(&sb, "eq(n\\,%d)", f)
+	}
+	vf := fmt.Sprintf("select='%s',crop=%d:%d:0:%d,format=gray", sb.String(), w, b.H, b.Y)
 	fr, err := ffx.NewFrameReader(input, vf, w, b.H, "gray")
 	if err != nil {
 		return nil, err
 	}
 	defer fr.Close()
-	buf := make([]byte, fr.FrameSize())
-	ok, err := fr.Next(buf)
-	if err != nil {
-		return nil, err
+	for _, f := range srt {
+		buf := make([]byte, fr.FrameSize())
+		ok, err := fr.Next(buf)
+		if err != nil || !ok {
+			break
+		}
+		out[f] = buf
 	}
-	if !ok {
-		return nil, fmt.Errorf("frame %d not readable", f)
-	}
-	return buf, nil
+	return out, nil
 }
 
 // refineOCRBox runs the stroke detector on a crop around an OCR box so the
@@ -415,6 +423,13 @@ func refineOCRBox(gray []uint8, w int, b Band, r imgx.Rect, p detect.Params) []u
 	return bits
 }
 
+// addBox records one OCR box accepted into the mask stage for the
+// two-pass refine in fuseOCR.
+type addBox struct {
+	frame int
+	rect  imgx.Rect
+}
+
 // fuseOCR merges OCR sidecar detections into the per-frame boxes (union with
 // the classical boxes) and, when masks are stored, into the repair masks.
 // Boxes that substantially overlap a classical box add nothing; the rest are
@@ -429,10 +444,58 @@ func fuseOCR(o Options, frames []events.Frame, masks []mask.Frame) int {
 	for f := 0; f < len(frames); f += stride {
 		sample = append(sample, f)
 	}
-	boxes, err := o.OCR.DetectFrames(o.Input, o.Band.Y, o.Band.H, sample)
-	if err != nil {
-		logf(o.Log, "warn: ocr sidecar unavailable, continuing without it: %v\n", err)
-		return 0
+	g := o.OCRConcurrency
+	if g < 1 {
+		g = 1
+	}
+	if g > len(sample) {
+		g = len(sample)
+	}
+	var boxes []ocr.Box
+	if g == 1 {
+		var err error
+		boxes, err = o.OCR.DetectFrames(o.Input, o.Band.Y, o.Band.H, sample)
+		if err != nil {
+			logf(o.Log, "warn: ocr sidecar unavailable, continuing without it: %v\n", err)
+			return 0
+		}
+	} else {
+		// Contiguous groups keep each sidecar's video seeks local; every group
+		// is a separate python process, so model init happens once per group.
+		parts := make([][]int, g)
+		for i, f := range sample {
+			parts[i*g/len(sample)] = append(parts[i*g/len(sample)], f)
+		}
+		results := make([][]ocr.Box, g)
+		errs := make([]error, g)
+		var wg sync.WaitGroup
+		for i := range parts {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				results[i], errs[i] = o.OCR.DetectFrames(o.Input, o.Band.Y, o.Band.H, parts[i])
+			}(i)
+		}
+		wg.Wait()
+		var firstErr error
+		ok := 0
+		for i := range parts {
+			if errs[i] != nil {
+				if firstErr == nil {
+					firstErr = errs[i]
+				}
+				continue
+			}
+			ok++
+			boxes = append(boxes, results[i]...)
+		}
+		if ok == 0 {
+			logf(o.Log, "warn: ocr sidecar unavailable, continuing without it: %v\n", firstErr)
+			return 0
+		}
+		if firstErr != nil {
+			logf(o.Log, "warn: ocr: %d/%d groups failed, continuing with partial results: %v\n", g-ok, g, firstErr)
+		}
 	}
 	byFrame := make(map[int][]ocr.Box)
 	for _, bx := range boxes {
@@ -442,7 +505,8 @@ func fuseOCR(o Options, frames []events.Frame, masks []mask.Frame) int {
 		byFrame[bx.Frame] = append(byFrame[bx.Frame], bx)
 	}
 	added := 0
-	grayCache := make(map[int][]uint8)
+	var adds []addBox
+	needGray := map[int]bool{}
 	for f, obs := range byFrame {
 		for _, ob := range obs {
 			covered := false
@@ -473,33 +537,41 @@ func fuseOCR(o Options, frames []events.Frame, masks []mask.Frame) int {
 			}
 			frames[f].Boxes = append(frames[f].Boxes, ob.Rect)
 			added++
-			if masks == nil {
-				continue
+			if masks != nil {
+				adds = append(adds, addBox{frame: f, rect: ob.Rect})
+				needGray[f] = true
 			}
-			gray, ok := grayCache[f]
-			if !ok {
-				gray, err = extractBandFrame(o.Input, f, o.W, o.Band)
-				if err != nil {
-					logf(o.Log, "warn: ocr refine: frame %d unreadable: %v\n", f, err)
-					gray = nil
-				}
-				grayCache[f] = gray
-			}
-			bits := make([]uint8, o.W*o.Band.H)
-			masks[f].Decode(bits, o.W)
-			if gray != nil {
-				if ref := refineOCRBox(gray, o.W, o.Band, ob.Rect, o.Params); ref != nil {
-					for i, v := range ref {
-						bits[i] |= v
-					}
-				} else {
-					rasterizeRect(bits, o.W, o.Band.H, ob.Rect)
+		}
+	}
+	if masks == nil || len(adds) == 0 {
+		return added
+	}
+	// Batch-extract every frame that needs stroke refinement in one ffmpeg
+	// pass; anything missing falls back to the bare rect below.
+	var fs []int
+	for f := range needGray {
+		fs = append(fs, f)
+	}
+	grayCache, gerr := extractBandFrames(o.Input, fs, o.W, o.Band)
+	if gerr != nil {
+		logf(o.Log, "warn: ocr refine: batch extract failed, using bare rects: %v\n", gerr)
+		grayCache = nil
+	}
+	for _, a := range adds {
+		bits := make([]uint8, o.W*o.Band.H)
+		masks[a.frame].Decode(bits, o.W)
+		if gray := grayCache[a.frame]; gray != nil {
+			if ref := refineOCRBox(gray, o.W, o.Band, a.rect, o.Params); ref != nil {
+				for i, v := range ref {
+					bits[i] |= v
 				}
 			} else {
-				rasterizeRect(bits, o.W, o.Band.H, ob.Rect)
+				rasterizeRect(bits, o.W, o.Band.H, a.rect)
 			}
-			masks[f] = mask.Encode(bits, o.W, o.Band.H)
+		} else {
+			rasterizeRect(bits, o.W, o.Band.H, a.rect)
 		}
+		masks[a.frame] = mask.Encode(bits, o.W, o.Band.H)
 	}
 	return added
 }
