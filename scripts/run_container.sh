@@ -36,6 +36,14 @@ case "${1:-}" in
       *) extra+=(--propainter-script /src/scripts/propainter_infer.py) ;;
     esac
     case " $* " in
+      *" --ocr "*)
+        case " $* " in
+          *" --ocr-script "*) ;;
+          *) extra+=(--ocr-script /src/scripts/ocr_boxes.py) ;;
+        esac
+        ;;
+    esac
+    case " $* " in
       *" --vlm-qc "*)
         case " $* " in
           *" --vlm-script "*) ;;
