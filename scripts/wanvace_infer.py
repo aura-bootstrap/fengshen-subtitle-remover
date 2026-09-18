@@ -25,7 +25,8 @@ Differences from the ProPainter sidecar (fixed-size diffusion model):
 Env knobs: WANVACE_HOME (required), WANVACE_TASK (default vace-1.3B),
 WANVACE_CKPT (default $WANVACE_HOME/Wan2.1-VACE-1.3B), WANVACE_SIZE,
 WANVACE_FRAME_NUM, WANVACE_STEPS, WANVACE_PROMPT, WANVACE_NEG_PROMPT,
-WANVACE_OFFLOAD (non-empty -> --offload_model True).
+WANVACE_OFFLOAD (non-empty -> --offload_model True),
+WANVACE_T5_CPU (non-empty -> --t5_cpu, T5 text encoder stays on CPU).
 
 STATUS: written against the Wan2.1 VACE CLI contract but NOT integration-tested
 (no local GPU). Treat the first real run as a bring-up: check the VACE arg
@@ -167,6 +168,8 @@ def main():
         cmd += ["--sample_steps", os.environ["WANVACE_STEPS"]]
     if os.environ.get("WANVACE_OFFLOAD"):
         cmd += ["--offload_model", "True"]
+    if os.environ.get("WANVACE_T5_CPU"):
+        cmd += ["--t5_cpu"]
     r = subprocess.run(cmd, cwd=home, capture_output=True, text=True)
     if r.returncode != 0:
         fail(f"generate exit {r.returncode}: {(r.stderr or r.stdout)[-400:]}")
