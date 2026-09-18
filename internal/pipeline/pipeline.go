@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aura-bootstrap/fengshen-subtitle-remover/internal/alpha"
@@ -320,7 +321,24 @@ func Run(o Options) (*Report, error) {
 		if err != nil {
 			return nil, err
 		}
-		fmt.Fprintf(o.Log, "engine %s: %.1fs -> %s\n", o.Engine, time.Since(t0).Seconds(), o.Output)
+		engDetail := ""
+		if len(rep.Routing) > 0 {
+			counts := map[string]int{}
+			order := []string{}
+			for _, d := range rep.Routing {
+				e := d.Engine
+				if _, seen := counts[e]; !seen {
+					order = append(order, e)
+				}
+				counts[e]++
+			}
+			parts := make([]string, 0, len(order))
+			for _, e := range order {
+				parts = append(parts, fmt.Sprintf("%s x%d", e, counts[e]))
+			}
+			engDetail = " (" + strings.Join(parts, ", ") + ")"
+		}
+		fmt.Fprintf(o.Log, "engine %s%s: %.1fs -> %s\n", o.Engine, engDetail, time.Since(t0).Seconds(), o.Output)
 	}
 
 	if o.Verify && o.Output != "" {
